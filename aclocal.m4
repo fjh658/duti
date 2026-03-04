@@ -50,13 +50,11 @@ AC_DEFUN([DUTI_CHECK_SDK],
 	    macosx_arches="-arch x86_64"
 	    ;;
 
-	darwin20*|darwin21*|darwin22*)
+	*)
+	    # darwin20+ (macOS 11+): arm64 support introduced with Apple Silicon
 	    sdk_path="${sdk_path}/MacOSX.sdk"
 	    macosx_arches="-arch x86_64 -arch arm64"
 	    ;;
-
-	*)
-	    AC_MSG_ERROR([${host_os} is not a supported system])
     esac
 
     if test -z "$macosx_sdk"; then
@@ -76,68 +74,7 @@ AC_DEFUN([DUTI_CHECK_DEPLOYMENT_TARGET],
 	    AC_HELP_STRING([--with-macosx-deployment-target=VERSION],
 	    [OS version]), macosx_dep_target="$withval")
 
-    case "${host_os}" in
-	darwin8*)
-	    dep_target="10.4"
-	    ;;
-
-	darwin9*)
-	    dep_target="10.5"
-	    ;;
-
-	darwin10*)
-	    dep_target="10.6"
-	    ;;
-
-	darwin11*)
-	    dep_target="10.7"
-	    ;;
-
-	darwin12*)
-	    dep_target="10.8"
-	    ;;
-
-	darwin13*)
-	    dep_target="10.9"
-	    ;;
-
-	darwin14*)
-	    dep_target="10.10"
-	    ;;
-
-	darwin15*)
-	    dep_target="10.11"
-	    ;;
-
-	darwin16*)
-	    dep_target="10.12"
-	    ;;
-
-	darwin17*)
-	    dep_target="10.13"
-	    ;;
-
-	darwin18*)
-	    dep_target="10.14"
-	    ;;
-
-	darwin19*)
-	    dep_target="10.15"
-	    ;;
-
-	darwin20*)
-	    dep_target="11"
-	    ;;
-
-	darwin21*)
-	    dep_target="12"
-	    ;;
-
-	darwin22*)
-	    dep_target="13"
-	    ;;
-
-    esac
+    dep_target="11"
 
     if test -z "$macosx_dep_target"; then
 	macosx_dep_target=$dep_target

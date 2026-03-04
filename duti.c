@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -24,6 +25,40 @@ struct roles		rtm[] = {
     { "all",    kLSRolesAll },
 };
 
+    static void
+usage( const char *prog )
+{
+    fprintf( stderr,
+	"duti — set default handlers for document types on macOS\n"
+	"\n"
+	"Usage:\n"
+	"  %s -s bundle_id|app_path { uti | extension | MIME | url_scheme } [ role ]\n"
+	"  %s -x extension\n"
+	"  %s -d uti\n"
+	"  %s -l uti\n"
+	"  %s [ settings_path ]\n"
+	"\n"
+	"Options:\n"
+	"  -s               Set default handler by bundle ID, or by app path\n"
+	"                   when multiple apps share the same bundle ID\n"
+	"  -x extension     Show default app for file extension\n"
+	"  -d uti           Show default handler for UTI\n"
+	"  -l uti           List all handlers for UTI\n"
+	"  -e extension     Show UTI declarations for extension\n"
+	"  -u uti           Show UTI declaration details\n"
+	"  -v, --verbose    Enable verbose output\n"
+	"  -V, --version    Print version and exit\n"
+	"  -h, --help       Show this help message\n"
+	"\n"
+	"Roles: none, viewer, editor, shell, all\n"
+	"\n"
+	"Examples:\n"
+	"  %s -s com.apple.Safari public.html all\n"
+	"  %s -s /Applications/MyApp.app .txt editor  # useful when apps share same bundle ID\n"
+	"  %s -x jpg\n",
+	prog, prog, prog, prog, prog, prog, prog, prog );
+}
+
     int
 main( int ac, char *av[] )
 {
@@ -37,7 +72,15 @@ main( int ac, char *av[] )
     extern int		optind;
     extern char		*optarg;
 
-    while (( c = getopt( ac, av, "d:e:l:hsu:Vvx:" )) != -1 ) {
+    static struct option long_options[] = {
+	{ "help",    no_argument, NULL, 'h' },
+	{ "version", no_argument, NULL, 'V' },
+	{ "verbose", no_argument, NULL, 'v' },
+	{ NULL,      0,           NULL,  0  },
+    };
+
+    while (( c = getopt_long( ac, av, "d:e:l:hsu:Vvx:",
+		    long_options, NULL )) != -1 ) {
 	switch ( c ) {
 	case 'd':	/* show default handler for UTI */
 	    return( uti_handler_show( optarg, 0 ));
@@ -46,9 +89,8 @@ main( int ac, char *av[] )
 		return( duti_utis_for_extension( optarg ));
 
 	case 'h':	/* help */
-	default:
-	    err++;
-	    break;
+	    usage( av[ 0 ] );
+	    exit( 0 );
 
 	case 'l':	/* list all handlers for UTI */
 	    return( uti_handler_show( optarg, 1 ));
@@ -61,7 +103,11 @@ main( int ac, char *av[] )
 		return( duti_utis( optarg ));
 
 	case 'V':	/* version */
+#ifdef BUILD_TIMESTAMP
+	    printf( "%s (built %s)\n", duti_version, BUILD_TIMESTAMP );
+#else
 	    printf( "%s\n", duti_version );
+#endif
 	    exit( 0 );
 
 	case 'v':	/* verbose */
@@ -70,6 +116,10 @@ main( int ac, char *av[] )
 
 	case 'x':	/* info for extension */
 	    return( duti_default_app_for_extension( optarg ));
+
+	default:
+	    usage( av[ 0 ] );
+	    exit( 1 );
 	}
     }
 
@@ -95,25 +145,21 @@ main( int ac, char *av[] )
 		    av[ optind + 1 ], NULL ));
 	}
 	/* this fallthrough works because set == 0 */
-	
+
     case 3 :	/* set UTI handler */
 	if ( set ) {
 	    return( duti_handler_set( av[ optind ],
 		    av[ optind + 1 ], av[ optind + 2 ] ));
 	}
 	/* fallthrough to error */
-    
+
     default :	/* error */
 	err++;
 	break;
     }
 
     if ( err ) {
-	fprintf( stderr, "usage: %s [ -hvV ] [ -d uti ] [ -l uti ] "
-			 "[ settings_path ]\n", av[ 0 ] );
-	fprintf( stderr, "usage: %s -s bundle_id { uti | url_scheme } "
-			 "[ role ]\n", av[ 0 ] );
-	fprintf( stderr, "usage: %s -x extension\n", av[ 0 ] );
+	usage( av[ 0 ] );
 	exit( 1 );
     }
 

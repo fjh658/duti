@@ -1,1 +1,5 @@
-const char		*duti_version = "@PACKAGE_VERSION@";
+/* overridden by -DDUTI_VERSION from Makefile */
+#ifndef DUTI_VERSION
+#define DUTI_VERSION "unknown"
+#endif
+const char		*duti_version = DUTI_VERSION;

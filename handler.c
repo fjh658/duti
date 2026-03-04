@@ -18,8 +18,136 @@ extern int		verbose;
 extern struct roles	rtm[];
 int			nroles;
 
+/*
+ * _LSUnregisterURL: private Launch Services function to remove an app
+ * from the LS database.  This is the same function that the lsregister
+ * command-line tool calls internally with its -u flag.  We use it to
+ * unregister competing apps that share the same bundle ID, so that
+ * LSSetDefaultRoleHandlerForContentType resolves to the correct app.
+ */
+extern OSStatus		_LSUnregisterURL( CFURLRef url );
+
 static void dump_cf_array( const void *value, void *context );
 static void dump_cf_dictionary( const void *key, const void *value, void *context );
+
+/*
+ * resolve_app_path: given an app path (e.g. /Applications/Foo.app),
+ * validate the bundle, extract its bundle ID, and ensure this
+ * specific app takes priority over other apps that share the
+ * same bundle ID.
+ *
+ * returns 0 on success with bid_out filled, 1 on error.
+ */
+    static int
+resolve_app_path( const char *path, char *bid_out, size_t bid_len )
+{
+    CFStringRef		cf_path = NULL;
+    CFURLRef		app_url = NULL;
+    CFBundleRef		bundle = NULL;
+    CFStringRef		bid = NULL;
+    CFArrayRef		all_urls = NULL;
+    struct stat		st;
+    OSStatus		rc;
+    int			ret = 1;
+
+    /* verify path exists and is a directory */
+    if ( stat( path, &st ) != 0 ) {
+	fprintf( stderr, "%s: %s\n", path, strerror( errno ));
+	return( 1 );
+    }
+    if ( !S_ISDIR( st.st_mode )) {
+	fprintf( stderr, "%s: not an app bundle\n", path );
+	return( 1 );
+    }
+
+    cf_path = CFStringCreateWithCString( kCFAllocatorDefault,
+		    path, kCFStringEncodingUTF8 );
+    if ( cf_path == NULL ) {
+	fprintf( stderr, "failed to create CFString from path\n" );
+	return( 1 );
+    }
+
+    app_url = CFURLCreateWithFileSystemPath( kCFAllocatorDefault,
+		    cf_path, kCFURLPOSIXPathStyle, true );
+    CFRelease( cf_path );
+    if ( app_url == NULL ) {
+	fprintf( stderr, "failed to create URL from path %s\n", path );
+	return( 1 );
+    }
+
+    /* validate it's a real bundle with a bundle ID */
+    bundle = CFBundleCreate( kCFAllocatorDefault, app_url );
+    if ( bundle == NULL ) {
+	fprintf( stderr, "%s: not a valid app bundle\n", path );
+	CFRelease( app_url );
+	return( 1 );
+    }
+
+    bid = CFBundleGetIdentifier( bundle );
+    if ( bid == NULL ) {
+	fprintf( stderr, "%s: missing bundle identifier\n", path );
+	CFRelease( bundle );
+	CFRelease( app_url );
+	return( 1 );
+    }
+
+    /*
+     * When multiple apps share the same bundle ID (e.g. several
+     * versions of IDA Pro all use com.hexrays.ida), the public API
+     * LSSetDefaultRoleHandlerForContentType only accepts a bundle ID
+     * and lets Launch Services pick which app to use — there is no
+     * public API to specify a particular app by path.
+     *
+     * The NSWorkspace setDefaultApplicationAtURL: API (macOS 12+)
+     * accepts an app URL but silently fails for dynamic UTIs.
+     *
+     * Our workaround:
+     *   1. LSCopyApplicationURLsForBundleIdentifier to find all
+     *      apps registered under this bundle ID.
+     *   2. _LSUnregisterURL to remove every competitor from the
+     *      Launch Services database (private API, same function
+     *      used by lsregister -u).
+     *   3. LSRegisterURL to register only our target app.
+     *   4. The caller then uses LSSetDefaultRoleHandlerForContentType
+     *      with the bundle ID, which now unambiguously resolves to
+     *      our target app.
+     *
+     * The unregistered apps are not harmed — they will be re-added
+     * to the database the next time Launch Services scans /Applications
+     * or the user opens them.  The default handler binding persists
+     * even after competitors are re-registered.
+     */
+    all_urls = LSCopyApplicationURLsForBundleIdentifier( bid, NULL );
+    if ( all_urls != NULL ) {
+	CFIndex		count = CFArrayGetCount( all_urls );
+
+	for ( CFIndex j = 0; j < count; j++ ) {
+	    CFURLRef	other = CFArrayGetValueAtIndex( all_urls, j );
+
+	    if ( !CFEqual( other, app_url )) {
+		_LSUnregisterURL( other );
+	    }
+	}
+	CFRelease( all_urls );
+    }
+
+    /* register our target app as the sole owner of this bundle ID */
+    rc = LSRegisterURL( app_url, true );
+    if ( rc != noErr ) {
+	fprintf( stderr, "failed to register %s (error %d)\n",
+		path, ( int )rc );
+	CFRelease( bundle );
+	CFRelease( app_url );
+	return( 1 );
+    }
+
+    ret = cf2c( bid, bid_out, ( int )bid_len );
+
+    CFRelease( bundle );
+    CFRelease( app_url );
+
+    return( ret );
+}
 
 
     int
@@ -446,6 +574,26 @@ duti_handler_set( char *bid, char *type, char *role )
     CFStringRef		tagClass = NULL, preferredUTI = NULL;
     int			rc = 0;
     int			i = 0;
+
+    /*
+     * detect app path: absolute path or ending in .app.
+     * resolve_app_path validates the bundle, unregisters competing
+     * apps with the same bundle ID, registers the target, and
+     * returns the bundle ID for use with the standard LS APIs.
+     */
+    if ( bid[0] == '/' || ( strlen( bid ) > 4 &&
+		strcmp( bid + strlen( bid ) - 4, ".app" ) == 0 )) {
+	char resolved_bid[ MAXPATHLEN ];
+
+	if ( resolve_app_path( bid, resolved_bid,
+			sizeof( resolved_bid )) != 0 ) {
+	    return( 2 );
+	}
+	if ( verbose ) {
+	    printf( "resolved %s to bundle ID %s\n", bid, resolved_bid );
+	}
+	bid = resolved_bid;
+    }
 
     if ( role != NULL ) {
 	for ( i = 0; i < nroles; i++ ) {

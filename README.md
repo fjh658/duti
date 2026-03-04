@@ -68,6 +68,23 @@ Examples
     duti -s com.apple.Finder ftp
     ```
 
+* Set a specific app as the default handler by path. This is useful when
+  multiple apps share the same bundle ID (e.g. different versions of the
+  same app in `/Applications` and `~/Downloads`):
+
+    ```sh
+    # Both apps have bundle ID com.example.myapp, but you want the one
+    # in ~/Downloads to be the default handler:
+    duti -s ~/Downloads/MyApp.app .txt all
+
+    # Use -v to see the resolved bundle ID
+    duti -v -s ~/Downloads/MyApp.app .txt all
+
+    # Output
+    resolved ~/Downloads/MyApp.app to bundle ID com.example.myapp
+    setting com.example.myapp as handler for public.plain-text
+    ```
+
 * Get default application information for .jpg files:
 
     ```sh

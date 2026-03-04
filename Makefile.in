@@ -32,11 +32,13 @@ DUTI_OBJ=	version.o util.o plist.o handler.o duti.o
 
 all : ${TARGETS}
 
+DUTI_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+
 version.o : version.c
-	${CC} ${CFLAGS} -c ${srcdir}/version.c
+	${CC} ${CFLAGS} -DDUTI_VERSION='"${DUTI_VERSION}"' -c ${srcdir}/version.c
 
 duti.o : duti.c
-	${CC} ${CFLAGS} -c ${srcdir}/duti.c
+	${CC} ${CFLAGS} -DBUILD_TIMESTAMP='"$(shell python3 -c "from datetime import datetime;d=datetime.now().astimezone();print(d.strftime(\"%Y-%m-%d %H:%M:%S.\") + f\"{d.microsecond//1000:03d}\" + d.strftime(\" %z\"))")"' -c ${srcdir}/duti.c
 
 handler.o : handler.c
 	${CC} ${CFLAGS} -c ${srcdir}/handler.c
